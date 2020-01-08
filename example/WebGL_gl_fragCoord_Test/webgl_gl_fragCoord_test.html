@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>webgl_gl_fragCoord_test_demo</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="../../lib/css/main.css">
+</head>
+<body>
+
+<div id="container"></div>
+<div id="info"><a href="https://blog.csdn.net/weixin_37683659" target="_blank" rel="noopener"> csdn_webglZhang </a>
+</div>
+
+<script id="vertexShader" type="x-shader/x-vertex">
+
+			precision mediump float;
+			precision mediump int;
+
+			uniform mat4 modelViewMatrix; // optional
+			uniform mat4 projectionMatrix; // optional
+
+			attribute vec3 position;
+
+			varying vec3 vPosition;
+
+			void main()	{
+
+				vPosition = (modelViewMatrix * vec4( position, 1.0 )).xyz;
+
+				gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+			}
+
+
+</script>
+
+<script id="fragmentShader" type="x-shader/x-fragment">
+			precision mediump float;
+			precision mediump int;
+
+			//投影矩阵的逆矩阵
+      		uniform mat4 projectionMatrixInverse;
+      		//视口变换矩阵的逆矩阵
+			uniform mat4 viewPortMatrixInverse;
+
+			//开始测试的标志
+			uniform bool testFlag;
+
+			varying vec3 vPosition;
+
+			//在0.00001的误差范围内进行比较
+			bool compare(float valueA,float  valueB){
+
+        		if(valueA>(valueB-0.00001) && valueA<(valueB+0.00001)){
+          			return true;
+        		}else{
+          			return false;
+        		}
+
+			}
+
+			void main()	{
+
+                //屏幕坐标系变换到NDC标准设备空间
+				vec4 ndcPosition = viewPortMatrixInverse * vec4(gl_FragCoord.xyz,1.0);
+
+                //标准设备空间变换到剪裁空间
+				vec4 clipPosition = ndcPosition/gl_FragCoord.w;
+
+				//剪裁空间变换到相机空间
+				vec4 viewPosition = projectionMatrixInverse * clipPosition;
+
+				//vs传递过来相机空间的顶底坐标和通过gl_FragCoord算出的相机空间进行比对
+				if(	compare(viewPosition.x,vPosition.x)&&
+					compare(viewPosition.y,vPosition.y)&&
+					compare(viewPosition.z,vPosition.z)&& testFlag){
+
+					//黄色，计算正确显示
+					gl_FragColor=vec4(1.0,1.0,0.0,1.0);
+
+				}else{
+
+					//红色，默认显示
+					gl_FragColor=vec4(1.0,0.0,0.0,1.0);
+				}
+
+			}
+
+</script>
+
+<script type="module">
+
+    import * as THREE from '../../lib/three/three.module.js';
+
+    import Stats from '../../lib/stats.module.js';
+
+    var container, stats;
+
+    var camera, scene, renderer;
+
+    var viewPortMatrixInverse;
+
+    var material;
+
+    init();
+    animate();
+
+    function init() {
+
+        container = document.getElementById('container');
+
+        camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 10);
+        camera.position.z = 2;
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x101010);
+
+        var geometry = new THREE.BoxBufferGeometry();
+
+        viewPortMatrixInverse = getViewPortMatrixInverse(
+            {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
+            {near: 0, far: 1}
+        );
+        camera.updateProjectionMatrix();
+
+        material = new THREE.RawShaderMaterial({
+
+            uniforms: {
+                projectionMatrixInverse: {value: camera.projectionMatrixInverse},
+                viewPortMatrixInverse: {value: viewPortMatrixInverse},
+                testFlag: {value: false}
+            },
+            vertexShader: document.getElementById('vertexShader').textContent,
+            fragmentShader: document.getElementById('fragmentShader').textContent,
+            side: THREE.DoubleSide,
+            transparent: true
+        });
+
+        var mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+
+        renderer = new THREE.WebGLRenderer();
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.debug.checkShaderErrors = true;
+        container.appendChild(renderer.domElement);
+
+        stats = new Stats();
+        container.appendChild(stats.dom);
+
+        window.addEventListener('resize', onWindowResize, false);
+
+    }
+
+    setTimeout(function () {
+        material.uniforms["testFlag"].value = true;
+    }, 2000);
+
+    function onWindowResize() {
+
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+    }
+
+    function getViewPortMatrixInverse(viewPort, depthRange) {
+
+        var _viewPortMatrix = new THREE.Matrix4();
+        var _viewPortMatrixInverse = new THREE.Matrix4();
+
+        _viewPortMatrix.set(
+            viewPort.width / 2, 0, 0, viewPort.x + viewPort.width / 2,
+            0, viewPort.height / 2, 0, viewPort.y + viewPort.height / 2,
+            0, 0, (depthRange.far - depthRange.near) / 2, (depthRange.far + depthRange.near) / 2,
+            0, 0, 0, 1
+        );
+
+        _viewPortMatrixInverse.getInverse(_viewPortMatrix, true);
+
+        return _viewPortMatrixInverse;
+    }
+
+    //
+
+    function animate() {
+
+        requestAnimationFrame(animate);
+
+        render();
+        stats.update();
+
+    }
+
+    function render() {
+
+        renderer.render(scene, camera);
+
+    }
+
+</script>
+
+</body>
+</html>
